@@ -7,7 +7,7 @@ struct SpaceRenamerApp: App {
     @State private var persistenceStore = PersistenceStore()
     @State private var shortcutManager = ShortcutManager()
     @State private var hudPanel: HUDPanel?
-    @State private var hasSetupHUD = false
+    @State private var hasCompletedSetup = false
 
     var body: some Scene {
         MenuBarExtra("SpaceRenamer", systemImage: "desktopcomputer") {
@@ -17,38 +17,64 @@ struct SpaceRenamerApp: App {
                 shortcutManager: shortcutManager
             )
             .task {
-                await setupHUDIfNeeded()
-                setupSpaceChangeNotifications()
+                await initialSetup()
             }
         }
         .defaultPosition(.trailing)
         .menuBarExtraStyle(.window)
     }
 
-    private func setupHUDIfNeeded() async {
-        guard !hasSetupHUD else { return }
-        hasSetupHUD = true
+    /// One-time setup: load persistence, create HUD, wire callbacks, register shortcuts
+    private func initialSetup() async {
+        guard !hasCompletedSetup else { return }
+        hasCompletedSetup = true
 
-        let settings = await persistenceStore.getHUDSettings()
-        if settings.enabled {
-            await MainActor.run {
-                let panel = HUDPanel(spaceManager: spaceManager, position: settings.position)
-                panel.orderFrontRegardless()
-                hudPanel = panel
+        // 1. Load saved space configs and apply to SpaceManager
+        let savedConfigs = await persistenceStore.getAllSpaceConfigs()
+        spaceManager.loadSavedConfigs(savedConfigs)
+
+        // 2. Wire SpaceManager callbacks for persistence
+        spaceManager.onSpaceUpdated = { [persistenceStore] space in
+            Task {
+                await persistenceStore.setSpaceName(space.customName, forUUID: space.id)
+                await persistenceStore.setSpaceShortcut(space.shortcut, forUUID: space.id)
+            }
+        }
+
+        // 3. Register saved shortcuts with ShortcutManager
+        registerShortcutsFromConfig(savedConfigs)
+
+        // 4. Register quick rename shortcut
+        if let quickRename = await persistenceStore.getQuickRenameShortcut() {
+            shortcutManager.registerShortcut(quickRename, id: "quick_rename") { [spaceManager] in
+                // Quick rename action will be wired in issue #10
+                _ = spaceManager.activeSpaceId
+            }
+        }
+
+        // 5. Setup HUD
+        let hudSettings = await persistenceStore.getHUDSettings()
+        if hudSettings.enabled {
+            let panel = HUDPanel(spaceManager: spaceManager, position: hudSettings.position)
+            panel.orderFrontRegardless()
+            hudPanel = panel
+        }
+
+        // 6. Wire active space change to HUD updates
+        spaceManager.onActiveSpaceChanged = { [weak hudPanel] activeSpace in
+            if let name = activeSpace?.customName {
+                hudPanel?.updateSpaceName(name)
             }
         }
     }
 
-    private func setupSpaceChangeNotifications() {
-        NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.activeSpaceDidChangeNotification,
-            object: nil,
-            queue: .main
-        ) { _ in
-            spaceManager.updateSpaces()
-            if let activeSpaceId = spaceManager.activeSpaceId,
-               let space = spaceManager.getSpace(activeSpaceId) {
-                hudPanel?.updateSpaceName(space.customName)
+    /// Register per-Space switch shortcuts from saved config
+    private func registerShortcutsFromConfig(_ configs: [String: AppConfig.SpaceConfig]) {
+        for space in spaceManager.spaces {
+            if let shortcut = space.shortcut {
+                shortcutManager.registerShortcut(shortcut, id: "space_\(space.id)") { [shortcutManager] in
+                    shortcutManager.switchToSpace(position: space.position)
+                }
             }
         }
     }
