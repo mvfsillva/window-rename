@@ -110,6 +110,10 @@ final class SpaceManager {
     @ObservationIgnored
     private var savedConfigs: [String: AppConfig.SpaceConfig] = [:]
 
+    /// Tracks known space UUIDs to detect topology changes
+    @ObservationIgnored
+    private var lastKnownSpaceUUIDs: Set<String> = []
+
     init() {
         self.cgsConnection = CGSMainConnectionID()
         setupNotifications()
@@ -195,8 +199,12 @@ final class SpaceManager {
             }
         }
 
-        // Re-apply custom names to Mission Control (survives Dock restarts)
-        applyAllCustomNamesToSystem()
+        // Re-apply custom names only when topology changes (space added/removed)
+        let currentUUIDs = Set(spaceArray.map(\.id))
+        if currentUUIDs != lastKnownSpaceUUIDs {
+            lastKnownSpaceUUIDs = currentUUIDs
+            applyAllCustomNamesToSystem()
+        }
 
         // Notify if active space changed
         if activeId != previousActiveId {
@@ -303,13 +311,17 @@ final class SpaceManager {
 
     /// Push the custom name to the system so it appears in Mission Control
     private func applyNameToSystem(_ space: SpaceInfo) {
+        guard space.numericId != 0 else { return }
         let cfName = space.customName as CFString
-        CGSSpaceSetName(cgsConnection, CGSSpaceID(space.numericId), cfName)
+        let err = CGSSpaceSetName(cgsConnection, CGSSpaceID(space.numericId), cfName)
+        if err != .success {
+            print("[SpaceRenamer] CGSSpaceSetName failed for space \(space.numericId): \(err.rawValue)")
+        }
     }
 
     /// Re-apply all custom names to the system (survives Dock restarts and topology changes)
     private func applyAllCustomNamesToSystem() {
-        for space in spaces where !space.customName.hasPrefix("Desktop ") {
+        for space in spaces where savedConfigs[space.id] != nil {
             applyNameToSystem(space)
         }
     }
