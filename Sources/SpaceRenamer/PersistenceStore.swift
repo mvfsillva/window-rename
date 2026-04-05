@@ -55,7 +55,12 @@ actor PersistenceStore {
     }
     
     // MARK: - Space Configuration
-    
+
+    /// Get all saved space configs for bulk loading into SpaceManager
+    func getAllSpaceConfigs() -> [String: AppConfig.SpaceConfig] {
+        config.spaces
+    }
+
     func getSpaceConfig(forUUID uuid: String) -> AppConfig.SpaceConfig? {
         config.spaces[uuid]
     }
@@ -122,7 +127,7 @@ actor PersistenceStore {
         saveTask?.cancel()
         saveTask = Task {
             try? await Task.sleep(nanoseconds: UInt64(saveDebounceInterval * 1_000_000_000))
-            _ = try? await saveConfig()
+            await saveConfig()
         }
     }
     
