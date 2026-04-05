@@ -201,7 +201,11 @@ final class SpaceManager {
 
     /// Fetch spaces using private CGS APIs
     private func fetchSpacesFromSystem() -> [SpaceInfo] {
-        guard let displaySpaces = CGSCopyManagedDisplaySpaces(cgsConnection) as? [[String: Any]] else {
+        guard let unmanagedSpaces = CGSCopyManagedDisplaySpaces(cgsConnection) else {
+            return []
+        }
+        let cfArray = unmanagedSpaces.takeRetainedValue()
+        guard let displaySpaces = cfArray as? [[String: Any]] else {
             return []
         }
 

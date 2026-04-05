@@ -7,6 +7,7 @@ struct SpaceRenamerApp: App {
     @State private var persistenceStore = PersistenceStore()
     @State private var shortcutManager = ShortcutManager()
     @State private var hudPanel: HUDPanel?
+    @State private var quickRenamePanel = QuickRenamePanel()
     @State private var hasCompletedSetup = false
 
     var body: some Scene {
@@ -29,11 +30,18 @@ struct SpaceRenamerApp: App {
         guard !hasCompletedSetup else { return }
         hasCompletedSetup = true
 
-        // 1. Load saved space configs and apply to SpaceManager
+        // 1. Sync Launch at Login state from system
+        let systemLoginEnabled = LoginItemManager.shared.isEnabled
+        let storedLoginEnabled = await persistenceStore.isLaunchAtLogin()
+        if systemLoginEnabled != storedLoginEnabled {
+            await persistenceStore.setLaunchAtLogin(systemLoginEnabled)
+        }
+
+        // 2. Load saved space configs and apply to SpaceManager
         let savedConfigs = await persistenceStore.getAllSpaceConfigs()
         spaceManager.loadSavedConfigs(savedConfigs)
 
-        // 2. Wire SpaceManager callbacks for persistence
+        // 3. Wire SpaceManager callbacks for persistence
         spaceManager.onSpaceUpdated = { [persistenceStore] space in
             Task {
                 await persistenceStore.setSpaceName(space.customName, forUUID: space.id)
@@ -41,18 +49,15 @@ struct SpaceRenamerApp: App {
             }
         }
 
-        // 3. Register saved shortcuts with ShortcutManager
+        // 4. Register saved shortcuts with ShortcutManager
         registerShortcutsFromConfig(savedConfigs)
 
-        // 4. Register quick rename shortcut
+        // 5. Register quick rename shortcut
         if let quickRename = await persistenceStore.getQuickRenameShortcut() {
-            shortcutManager.registerShortcut(quickRename, id: "quick_rename") { [spaceManager] in
-                // Quick rename action will be wired in issue #10
-                _ = spaceManager.activeSpaceId
-            }
+            registerQuickRenameShortcut(quickRename)
         }
 
-        // 5. Setup HUD
+        // 6. Setup HUD
         let hudSettings = await persistenceStore.getHUDSettings()
         if hudSettings.enabled {
             let panel = HUDPanel(spaceManager: spaceManager, position: hudSettings.position)
@@ -60,7 +65,7 @@ struct SpaceRenamerApp: App {
             hudPanel = panel
         }
 
-        // 6. Wire active space change to HUD updates
+        // 7. Wire active space change to HUD updates
         spaceManager.onActiveSpaceChanged = { [weak hudPanel] activeSpace in
             if let name = activeSpace?.customName {
                 hudPanel?.updateSpaceName(name)
@@ -76,6 +81,25 @@ struct SpaceRenamerApp: App {
                     shortcutManager.switchToSpace(position: space.position)
                 }
             }
+        }
+    }
+
+    /// Register the quick rename shortcut to show the floating rename panel
+    private func registerQuickRenameShortcut(_ combo: KeyCombo) {
+        shortcutManager.registerShortcut(combo, id: "quick_rename") { [spaceManager, persistenceStore, quickRenamePanel] in
+            guard let activeId = spaceManager.activeSpaceId,
+                  let space = spaceManager.getSpace(activeId) else { return }
+
+            quickRenamePanel.show(
+                currentName: space.customName,
+                onRename: { newName in
+                    spaceManager.updateSpaceName(activeId, newName: newName)
+                    Task {
+                        await persistenceStore.setSpaceName(newName, forUUID: activeId)
+                    }
+                },
+                onDismiss: {}
+            )
         }
     }
 }
