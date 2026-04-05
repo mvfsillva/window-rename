@@ -34,21 +34,33 @@ struct MenuBarUI: View {
 
             Divider()
 
-            // Spaces List
+            // Spaces List (grouped by display when multi-monitor)
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(spaceManager.spaces) { space in
-                        SpaceRowView(
-                            space: space,
-                            isActive: space.id == spaceManager.activeSpaceId,
-                            isEditing: editingSpaceId == space.id,
-                            editingName: $editingName,
-                            onEdit: { startEditing(space) },
-                            onSave: { saveName(for: space) },
-                            onCancel: { cancelEditing() },
-                            onRecordShortcut: { beginShortcutRecording(for: .space(space.id)) },
-                            onClearShortcut: { clearShortcut(for: space) }
-                        )
+                    let displayUUIDs = spaceManager.displayUUIDs
+                    let isMultiMonitor = displayUUIDs.count > 1
+
+                    ForEach(displayUUIDs, id: \.self) { displayUUID in
+                        if isMultiMonitor {
+                            Text(displayLabel(for: displayUUID))
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.secondary)
+                                .padding(.top, displayUUID == displayUUIDs.first ? 0 : 8)
+                        }
+
+                        ForEach(spaceManager.spaces(forDisplay: displayUUID)) { space in
+                            SpaceRowView(
+                                space: space,
+                                isActive: space.id == spaceManager.activeSpaceId,
+                                isEditing: editingSpaceId == space.id,
+                                editingName: $editingName,
+                                onEdit: { startEditing(space) },
+                                onSave: { saveName(for: space) },
+                                onCancel: { cancelEditing() },
+                                onRecordShortcut: { beginShortcutRecording(for: .space(space.id)) },
+                                onClearShortcut: { clearShortcut(for: space) }
+                            )
+                        }
                     }
                 }
                 .padding(.vertical, 4)
@@ -241,6 +253,15 @@ struct MenuBarUI: View {
     }
 
     // MARK: - Settings
+
+    /// Friendly label for a display UUID (falls back to "Display (short-id)")
+    private func displayLabel(for uuid: String) -> String {
+        if uuid == "Main" || uuid.isEmpty {
+            return "Main Display"
+        }
+        let shortId = String(uuid.prefix(8))
+        return "Display (\(shortId))"
+    }
 
     private func loadSettings() async {
         let settings = await persistenceStore.getHUDSettings()
