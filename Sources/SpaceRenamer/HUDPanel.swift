@@ -2,16 +2,22 @@ import Foundation
 import AppKit
 import SwiftUI
 
+/// Observable model for HUD state, enabling animated SwiftUI updates
+@Observable
+final class HUDState {
+    var spaceName: String = "Desktop"
+    var position: AppConfig.HUDPosition = .topRight
+}
+
 /// Floating HUD panel that displays the current Space name
 class HUDPanel: NSPanel {
     private var hostingView: NSHostingView<HUDContentView>?
-    private let screenRect: NSRect
+    private let hudState = HUDState()
+    private let padding: CGFloat = 12
 
     init(spaceManager: SpaceManager, position: AppConfig.HUDPosition) {
-        self.screenRect = NSScreen.main?.frame ?? .zero
-
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 200, height: 50),
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 44),
             styleMask: [.nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -24,59 +30,90 @@ class HUDPanel: NSPanel {
         self.isOpaque = false
         self.hasShadow = true
 
-        // Create the SwiftUI content
-        let spaceName = spaceManager.getSpace(spaceManager.activeSpaceId ?? "")?.customName ?? "Desktop"
-        let content = HUDContentView(spaceName: spaceName)
-        let hosting = NSHostingView(rootView: content)
-        self.hostingView = hosting
+        // Set initial state
+        hudState.spaceName = spaceManager.getSpace(spaceManager.activeSpaceId ?? "")?.customName ?? "Desktop"
+        hudState.position = position
 
+        // Create the SwiftUI content with observable state
+        let content = HUDContentView(state: hudState)
+        let hosting = NSHostingView(rootView: content)
+        hosting.translatesAutoresizingMaskIntoConstraints = false
+        self.hostingView = hosting
         self.contentView = hosting
 
-        updatePosition(position)
+        // Observe size changes from SwiftUI for dynamic sizing
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.resizeToFitContent()
+            self?.repositionOnScreen()
+        }
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
+    func updateSpaceName(_ name: String) {
+        hudState.spaceName = name
+
+        // Resize after the SwiftUI content updates
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.resizeToFitContent()
+            self?.repositionOnScreen()
+        }
+    }
+
     func updatePosition(_ position: AppConfig.HUDPosition) {
-        let padding: CGFloat = 12
-        let width: CGFloat = 180
-        let height: CGFloat = 50
+        hudState.position = position
+        repositionOnScreen()
+    }
+
+    /// Resize the panel to fit the SwiftUI content's intrinsic size
+    private func resizeToFitContent() {
+        guard let hosting = hostingView else { return }
+        let fittingSize = hosting.fittingSize
+        let width = max(fittingSize.width, 60)  // minimum width
+        let height = max(fittingSize.height, 36)
+
+        let currentFrame = frame
+        setContentSize(NSSize(width: width, height: height))
+
+        // Keep the position stable after resize
+        if currentFrame.origin != .zero {
+            repositionOnScreen()
+        }
+    }
+
+    /// Position the panel in the correct corner of the main screen
+    private func repositionOnScreen() {
+        guard let screen = NSScreen.main else { return }
+        let screenFrame = screen.visibleFrame
+        let panelSize = frame.size
 
         let x: CGFloat
         let y: CGFloat
 
-        switch position {
+        switch hudState.position {
         case .topLeft:
-            x = padding
-            y = screenRect.height - height - padding
+            x = screenFrame.minX + padding
+            y = screenFrame.maxY - panelSize.height - padding
         case .topRight:
-            x = screenRect.width - width - padding
-            y = screenRect.height - height - padding
+            x = screenFrame.maxX - panelSize.width - padding
+            y = screenFrame.maxY - panelSize.height - padding
         case .bottomLeft:
-            x = padding
-            y = padding
+            x = screenFrame.minX + padding
+            y = screenFrame.minY + padding
         case .bottomRight:
-            x = screenRect.width - width - padding
-            y = padding
+            x = screenFrame.maxX - panelSize.width - padding
+            y = screenFrame.minY + padding
         }
 
-        setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
-    }
-
-    func updateSpaceName(_ name: String) {
-        if let hosting = hostingView {
-            let newContent = HUDContentView(spaceName: name)
-            hosting.rootView = newContent
-        }
+        setFrameOrigin(NSPoint(x: x, y: y))
     }
 }
 
-/// SwiftUI view for the HUD content
+/// SwiftUI view for the HUD content with crossfade animation
 struct HUDContentView: View {
-    let spaceName: String
-    @State private var showContent = true
+    @Bindable var state: HUDState
 
     var body: some View {
         ZStack {
@@ -84,16 +121,18 @@ struct HUDContentView: View {
             VisualEffectView(material: .hudWindow, blendingMode: .withinWindow)
                 .cornerRadius(8)
 
-            // Content
-            Text(spaceName)
+            // Content with crossfade animation
+            Text(state.spaceName)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(.white)
                 .lineLimit(1)
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.vertical, 10)
+                .id(state.spaceName)  // Force view identity change for transition
+                .transition(.opacity)
+                .animation(.easeInOut(duration: 0.25), value: state.spaceName)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .transition(.opacity)
+        .fixedSize()  // Auto-size to text content
     }
 }
 
@@ -116,5 +155,9 @@ struct VisualEffectView: NSViewRepresentable {
 }
 
 #Preview {
-    HUDContentView(spaceName: "Project Workspace")
+    HUDContentView(state: {
+        let s = HUDState()
+        s.spaceName = "Project Workspace"
+        return s
+    }())
 }
