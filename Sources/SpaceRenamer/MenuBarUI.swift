@@ -1,6 +1,13 @@
 import SwiftUI
 import AppKit
 
+// MARK: - Shortcut ID Constants
+
+enum ShortcutID {
+    static let quickRename = "quick_rename"
+    static func space(_ uuid: String) -> String { "space_\(uuid)" }
+}
+
 struct MenuBarUI: View {
     @State var spaceManager: SpaceManager
     @State var persistenceStore: PersistenceStore
@@ -187,7 +194,7 @@ struct MenuBarUI: View {
     private func targetId(for target: ShortcutTarget) -> String {
         switch target {
         case .space(let id): return id
-        case .quickRename: return "quick_rename"
+        case .quickRename: return ShortcutID.quickRename
         }
     }
 
@@ -215,7 +222,7 @@ struct MenuBarUI: View {
 
             // Register with ShortcutManager
             if let space = spaceManager.getSpace(spaceId) {
-                shortcutManager.registerShortcut(combo, id: "space_\(spaceId)") { [shortcutManager] in
+                shortcutManager.registerShortcut(combo, id: ShortcutID.space(spaceId)) { [shortcutManager] in
                     shortcutManager.switchToSpace(position: space.position)
                 }
             }
@@ -226,7 +233,7 @@ struct MenuBarUI: View {
 
         case .quickRename:
             savedQuickRenameShortcut = combo
-            shortcutManager.registerShortcut(combo, id: "quick_rename") {
+            shortcutManager.registerShortcut(combo, id: ShortcutID.quickRename) {
                 // Quick rename action is wired in SpaceRenamerApp
             }
             Task {
@@ -240,7 +247,7 @@ struct MenuBarUI: View {
 
     private func clearShortcut(for space: SpaceInfo) {
         spaceManager.updateSpaceShortcut(space.id, shortcut: nil)
-        shortcutManager.unregisterShortcut(id: "space_\(space.id)")
+        shortcutManager.unregisterShortcut(id: ShortcutID.space(space.id))
         Task {
             await persistenceStore.setSpaceShortcut(nil, forUUID: space.id)
         }
@@ -248,7 +255,7 @@ struct MenuBarUI: View {
 
     private func clearQuickRenameShortcut() {
         savedQuickRenameShortcut = nil
-        shortcutManager.unregisterShortcut(id: "quick_rename")
+        shortcutManager.unregisterShortcut(id: ShortcutID.quickRename)
         Task {
             await persistenceStore.setQuickRenameShortcut(nil)
         }

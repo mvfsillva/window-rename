@@ -77,7 +77,7 @@ struct SpaceRenamerApp: App {
     private func registerShortcutsFromConfig(_ configs: [String: AppConfig.SpaceConfig]) {
         for space in spaceManager.spaces {
             if let shortcut = space.shortcut {
-                shortcutManager.registerShortcut(shortcut, id: "space_\(space.id)") { [shortcutManager] in
+                shortcutManager.registerShortcut(shortcut, id: ShortcutID.space(space.id)) { [shortcutManager] in
                     shortcutManager.switchToSpace(position: space.position)
                 }
             }
@@ -86,7 +86,7 @@ struct SpaceRenamerApp: App {
 
     /// Register the quick rename shortcut to show the floating rename panel
     private func registerQuickRenameShortcut(_ combo: KeyCombo) {
-        shortcutManager.registerShortcut(combo, id: "quick_rename") { [spaceManager, persistenceStore, quickRenamePanel] in
+        shortcutManager.registerShortcut(combo, id: ShortcutID.quickRename) { [spaceManager, persistenceStore, quickRenamePanel] in
             guard let activeId = spaceManager.activeSpaceId,
                   let space = spaceManager.getSpace(activeId) else { return }
 
