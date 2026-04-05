@@ -108,6 +108,11 @@ final class SpaceManager {
     @ObservationIgnored
     private var wakeObserver: NSObjectProtocol?
 
+    /// Tracks the previous set of space UUIDs to detect topology changes (spaces added/removed).
+    /// `onSpacesRefreshed` only fires when this set changes, avoiding unnecessary work on every poll.
+    @ObservationIgnored
+    private var lastKnownSpaceUUIDs: Set<String> = []
+
     var spaces: [SpaceInfo] = []
     var activeSpaceId: String?
 
@@ -203,9 +208,13 @@ final class SpaceManager {
             onActiveSpaceChanged?(activeSpace)
         }
 
-        // Report all currently active Space UUIDs for lastSeen tracking
-        let activeUUIDs = Set(spaceArray.map(\.id))
-        onSpacesRefreshed?(activeUUIDs)
+        // Only report space UUIDs when the topology actually changes (spaces added/removed),
+        // not on every 3-second poll tick. This avoids unnecessary updateLastSeen/cleanup work.
+        let currentUUIDs = Set(spaceArray.map(\.id))
+        if currentUUIDs != lastKnownSpaceUUIDs {
+            lastKnownSpaceUUIDs = currentUUIDs
+            onSpacesRefreshed?(currentUUIDs)
+        }
     }
 
     /// Fetch spaces using private CGS APIs
