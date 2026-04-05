@@ -13,6 +13,7 @@ struct MenuBarUI: View {
     @State private var hudPosition: AppConfig.HUDPosition = .topRight
     @State private var hudEnabled: Bool = true
     @State private var launchAtLogin: Bool = false
+    @State private var savedQuickRenameShortcut: KeyCombo?
 
     /// Identifies what we're recording a shortcut for
     enum ShortcutTarget: Equatable {
@@ -154,8 +155,7 @@ struct MenuBarUI: View {
     // MARK: - Quick Rename Shortcut State
 
     private var quickRenameShortcut: KeyCombo? {
-        // Read from spaces (loaded in task)
-        nil  // Will be populated from persistence
+        savedQuickRenameShortcut
     }
 
     // MARK: - Editing
@@ -196,7 +196,7 @@ struct MenuBarUI: View {
         case .space(let id):
             return spaceManager.getSpace(id)?.shortcut
         case .quickRename:
-            return nil
+            return savedQuickRenameShortcut
         }
     }
 
@@ -225,6 +225,7 @@ struct MenuBarUI: View {
             }
 
         case .quickRename:
+            savedQuickRenameShortcut = combo
             shortcutManager.registerShortcut(combo, id: "quick_rename") {
                 // Quick rename action is wired in SpaceRenamerApp
             }
@@ -246,6 +247,7 @@ struct MenuBarUI: View {
     }
 
     private func clearQuickRenameShortcut() {
+        savedQuickRenameShortcut = nil
         shortcutManager.unregisterShortcut(id: "quick_rename")
         Task {
             await persistenceStore.setQuickRenameShortcut(nil)
@@ -268,6 +270,7 @@ struct MenuBarUI: View {
         hudEnabled = settings.enabled
         hudPosition = settings.position
         launchAtLogin = await persistenceStore.isLaunchAtLogin()
+        savedQuickRenameShortcut = await persistenceStore.getQuickRenameShortcut()
     }
 }
 
