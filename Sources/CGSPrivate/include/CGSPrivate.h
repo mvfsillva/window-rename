@@ -28,4 +28,7 @@ extern CFArrayRef CGSCopyManagedDisplaySpaces(CGSConnectionID cid);
 // Get the currently active space
 extern CGSSpaceID CGSGetActiveSpace(CGSConnectionID cid);
 
+// Set the display name for a Space (appears in Mission Control)
+extern CGError CGSSpaceSetName(CGSConnectionID cid, CGSSpaceID sid, CFStringRef name);
+
 #endif /* CGSPrivate_h */
