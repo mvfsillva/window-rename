@@ -41,7 +41,12 @@ struct SpaceRenamerApp: App {
         let savedConfigs = await persistenceStore.getAllSpaceConfigs()
         spaceManager.loadSavedConfigs(savedConfigs)
 
-        // 3. Wire SpaceManager callbacks for persistence
+        // 3. Run initial cleanup of stale Space configs (30-day retention)
+        let currentUUIDs = Set(spaceManager.spaces.map(\.id))
+        await persistenceStore.updateLastSeen(activeUUIDs: currentUUIDs)
+        await persistenceStore.cleanupRemovedSpaces(activeUUIDs: currentUUIDs)
+
+        // 4. Wire SpaceManager callbacks for persistence
         spaceManager.onSpaceUpdated = { [persistenceStore] space in
             Task {
                 await persistenceStore.setSpaceName(space.customName, forUUID: space.id)
@@ -49,15 +54,23 @@ struct SpaceRenamerApp: App {
             }
         }
 
-        // 4. Register saved shortcuts with ShortcutManager
+        // 5. Wire space-refresh callback to update lastSeen timestamps and run cleanup
+        spaceManager.onSpacesRefreshed = { [persistenceStore] activeUUIDs in
+            Task {
+                await persistenceStore.updateLastSeen(activeUUIDs: activeUUIDs)
+                await persistenceStore.cleanupRemovedSpaces(activeUUIDs: activeUUIDs)
+            }
+        }
+
+        // 6. Register saved shortcuts with ShortcutManager
         registerShortcutsFromConfig(savedConfigs)
 
-        // 5. Register quick rename shortcut
+        // 7. Register quick rename shortcut
         if let quickRename = await persistenceStore.getQuickRenameShortcut() {
             registerQuickRenameShortcut(quickRename)
         }
 
-        // 6. Setup HUD
+        // 8. Setup HUD
         let hudSettings = await persistenceStore.getHUDSettings()
         if hudSettings.enabled {
             let panel = HUDPanel(spaceManager: spaceManager, position: hudSettings.position)
@@ -65,7 +78,7 @@ struct SpaceRenamerApp: App {
             hudPanel = panel
         }
 
-        // 7. Wire active space change to HUD updates
+        // 9. Wire active space change to HUD updates
         spaceManager.onActiveSpaceChanged = { [weak hudPanel] activeSpace in
             if let name = activeSpace?.customName {
                 hudPanel?.updateSpaceName(name)

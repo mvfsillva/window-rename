@@ -97,6 +97,11 @@ final class SpaceManager {
     @ObservationIgnored
     var onSpaceUpdated: ((SpaceInfo) -> Void)?
 
+    /// Callback invoked after every space list refresh with the set of currently active UUIDs.
+    /// Used by PersistenceStore to update lastSeen timestamps and run cleanup.
+    @ObservationIgnored
+    var onSpacesRefreshed: ((Set<String>) -> Void)?
+
     @ObservationIgnored
     private var activeSpaceObserver: NSObjectProtocol?
 
@@ -197,6 +202,10 @@ final class SpaceManager {
             let activeSpace = activeId.flatMap { id in spaces.first { $0.id == id } }
             onActiveSpaceChanged?(activeSpace)
         }
+
+        // Report all currently active Space UUIDs for lastSeen tracking
+        let activeUUIDs = Set(spaceArray.map(\.id))
+        onSpacesRefreshed?(activeUUIDs)
     }
 
     /// Fetch spaces using private CGS APIs

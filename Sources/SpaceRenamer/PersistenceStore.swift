@@ -5,14 +5,15 @@ struct AppConfig: Codable {
     struct SpaceConfig: Codable {
         var name: String
         var shortcut: KeyCombo?
+        var lastSeen: Date?
     }
-    
+
     var spaces: [String: SpaceConfig] = [:]
     var quickRenameShortcut: KeyCombo?
     var launchAtLogin: Bool = false
     var hudPosition: HUDPosition = .topRight
     var hudEnabled: Bool = true
-    
+
     enum HUDPosition: String, Codable {
         case topLeft
         case topRight
@@ -26,8 +27,11 @@ actor PersistenceStore {
     private let configURL: URL
     private var config: AppConfig
     private var saveTask: Task<Void, Never>?
-    
+
     nonisolated private let saveDebounceInterval: TimeInterval = 0.5
+
+    /// How long to retain config for a removed Space (30 days).
+    nonisolated private let retentionInterval: TimeInterval = 30 * 24 * 60 * 60
     
     init() {
         let appSupport = FileManager.default.urls(
@@ -42,8 +46,10 @@ actor PersistenceStore {
         
         // Load existing config or create new
         if FileManager.default.fileExists(atPath: configURL.path) {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
             if let data = try? Data(contentsOf: configURL),
-               let loaded = try? JSONDecoder().decode(AppConfig.self, from: data) {
+               let loaded = try? decoder.decode(AppConfig.self, from: data) {
                 self.config = loaded
             } else {
                 self.config = AppConfig()
@@ -52,6 +58,9 @@ actor PersistenceStore {
             self.config = AppConfig()
             // Initial save deferred to first actor-isolated call
         }
+
+        // Migrate: backfill lastSeen = now for any existing configs missing it
+        Self.migrateLastSeenDates(config: &self.config, configURL: configURL)
     }
     
     // MARK: - Space Configuration
@@ -132,16 +141,69 @@ actor PersistenceStore {
     }
     
     private func saveConfig() async -> Void {
-        let data = try? JSONEncoder().encode(config)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try? encoder.encode(config)
         if let data = data {
             try? data.write(to: configURL, options: .atomic)
         }
     }
     
+    // MARK: - Last-Seen Tracking
+
+    /// Update `lastSeen` to now for every Space UUID currently present on the system.
+    /// Call this from SpaceManager whenever it refreshes the space list.
+    func updateLastSeen(activeUUIDs: Set<String>) {
+        let now = Date()
+        for uuid in activeUUIDs {
+            config.spaces[uuid]?.lastSeen = now
+        }
+        debouncedSave()
+    }
+
     // MARK: - Cleanup
-    
-    /// Remove Space config after 30 days of inactivity
-    func cleanupRemovedSpaces() {
-        // TODO: Implement cleanup logic for removed spaces
+
+    /// Remove Space configs whose `lastSeen` is older than the retention interval (30 days).
+    /// Safe to call at app launch and on topology changes.
+    func cleanupRemovedSpaces(activeUUIDs: Set<String>) {
+        let cutoff = Date().addingTimeInterval(-retentionInterval)
+        let uuidsToRemove = config.spaces.keys.filter { uuid in
+            // Never remove a Space that is currently active on the system
+            guard !activeUUIDs.contains(uuid) else { return false }
+            guard let lastSeen = config.spaces[uuid]?.lastSeen else {
+                // No lastSeen means migration already set it; keep it
+                return false
+            }
+            return lastSeen < cutoff
+        }
+        for uuid in uuidsToRemove {
+            config.spaces.removeValue(forKey: uuid)
+        }
+        if !uuidsToRemove.isEmpty {
+            debouncedSave()
+        }
+    }
+
+    // MARK: - Migration
+
+    /// Backfill `lastSeen = now` for any existing Space config that was saved
+    /// before the lastSeen field was introduced. Static to allow calling from nonisolated init.
+    private nonisolated static func migrateLastSeenDates(config: inout AppConfig, configURL: URL) {
+        let now = Date()
+        var didMigrate = false
+        for uuid in config.spaces.keys {
+            if config.spaces[uuid]?.lastSeen == nil {
+                config.spaces[uuid]?.lastSeen = now
+                didMigrate = true
+            }
+        }
+        if didMigrate {
+            // Synchronous save during init — config file is small
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            if let data = try? encoder.encode(config) {
+                try? data.write(to: configURL, options: .atomic)
+            }
+        }
     }
 }
