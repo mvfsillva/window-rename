@@ -231,9 +231,53 @@ Uses `SMAppService` (modern macOS login items API). Toggled from the menu bar po
 
 macOS 14 (Sonoma). Ensures `MenuBarExtra`, `SMAppService`, and `@Observable` support.
 
+## V2 — Mission Control Name Integration
+
+### Goal
+
+Show custom Space names directly in Mission Control, replacing the default "Desktop 1", "Desktop 2", etc. labels. This removes the need for users to rely solely on the HUD or menu bar to identify their Spaces.
+
+### Approach
+
+Use the `CGSSpaceSetName` private API from the SkyLight framework. This is the same framework already used in v1 for `CGSMainConnectionID`, `CGSCopyManagedDisplaySpaces`, and `CGSGetActiveSpace`. No SIP disable is required — unlike SIMBL/Dock injection approaches, `CGSSpaceSetName` works with SIP enabled and needs no special entitlements or root access.
+
+New bridging header declaration:
+
+```c
+extern void CGSSpaceSetName(CGSConnectionID cid, CGSSpaceID sid, CFStringRef name);
+```
+
+### How It Works
+
+1. **On rename** — When the user renames a Space (via popover or quick rename), `SpaceManager` calls `CGSSpaceSetName(cid, sid, name)` to push the custom name to the system immediately. Mission Control reflects the new name the next time it is opened.
+2. **On app launch** — All saved custom names from `PersistenceStore` are re-applied via `CGSSpaceSetName` so that Mission Control shows the correct labels from startup.
+3. **On topology refresh** — Every Space refresh cycle (3-second poll, `activeSpaceDidChangeNotification`, `didWakeNotification`) re-applies all custom names. This ensures names survive Dock restarts, display configuration changes, and sleep/wake cycles.
+
+### Limitations
+
+- **Names persist only until the Dock process restarts.** The WindowServer does not persist names set via `CGSSpaceSetName` across Dock restarts. SpaceRenamer must be running to maintain them.
+- **If SpaceRenamer quits**, names revert to "Desktop N" the next time the Dock process restarts (e.g., on reboot or `killall Dock`). While the app is not running, Mission Control shows default labels. Re-launching SpaceRenamer restores all saved names.
+- **Private API compatibility.** `CGSSpaceSetName` is a private SkyLight API tested on macOS 14 (Sonoma). As an undocumented API, it may change or be removed in future macOS versions.
+- **Graceful degradation.** If `CGSSpaceSetName` is removed in a future macOS release, the app continues to function normally for HUD and menu bar Space naming. Only the Mission Control label injection degrades — users would see the default "Desktop N" labels in Mission Control while custom names remain visible in the HUD and menu bar.
+
+### Alternatives Considered
+
+| Approach | Why rejected |
+|----------|-------------|
+| **SIMBL Dock injection** | Requires disabling SIP to inject code into Dock.app. Breaks on every macOS update. Not viable for general distribution. |
+| **Accessibility API** | Could overlay text on Mission Control labels, but causes visual flicker, requires precise coordinate tracking, and is fragile across macOS versions. |
+| **Plist modification** | Editing `com.apple.spaces.plist` or `com.apple.dock.plist` can store names but does not update the Mission Control UI without a Dock restart, causing a disruptive visual reset. |
+| **WindowServer IPC** | Direct Mach message manipulation of WindowServer is extremely fragile, undocumented, and changes between macOS releases. |
+
+### Changes to "Out of Scope (v1)"
+
+With v2, the following item moves from out-of-scope to implemented:
+
+- ~~Mission Control name injection (requires SIP disabled)~~ — Now supported via `CGSSpaceSetName` without SIP disable.
+
 ## Out of Scope (v1)
 
-- Mission Control name injection (requires SIP disabled)
+- ~~Mission Control name injection (requires SIP disabled)~~ — Resolved in V2 via `CGSSpaceSetName` (see above)
 - Per-display HUD widgets (only main display in v1)
 - Custom icons per Space
 - Space creation/deletion from within the app
