@@ -239,7 +239,7 @@ Show custom Space names directly in Mission Control, replacing the default "Desk
 
 ### Approach
 
-Use the `CGSSpaceSetName` private API from the SkyLight framework. This is the same framework already used in v1 for `CGSMainConnectionID`, `CGSCopyManagedDisplaySpaces`, and `CGSGetActiveSpace`.
+Use the `CGSSpaceSetName` private API from the SkyLight framework. This is the same framework already used in v1 for `CGSMainConnectionID`, `CGSCopyManagedDisplaySpaces`, and `CGSGetActiveSpace`. No SIP disable is required — unlike SIMBL/Dock injection approaches, `CGSSpaceSetName` works with SIP enabled and needs no special entitlements or root access.
 
 New bridging header declaration:
 
@@ -255,9 +255,10 @@ extern void CGSSpaceSetName(CGSConnectionID cid, CGSSpaceID sid, CFStringRef nam
 
 ### Limitations
 
-- **No SIP disable required.** Unlike SIMBL/Dock injection approaches, `CGSSpaceSetName` works with SIP enabled. No special entitlements or root access needed.
-- **Names are session-only in the system.** The WindowServer does not persist names set via `CGSSpaceSetName` across Dock restarts. SpaceRenamer must be running to maintain them.
+- **Names persist only until the Dock process restarts.** The WindowServer does not persist names set via `CGSSpaceSetName` across Dock restarts. SpaceRenamer must be running to maintain them.
 - **If SpaceRenamer quits**, names revert to "Desktop N" the next time the Dock process restarts (e.g., on reboot or `killall Dock`). While the app is not running, Mission Control shows default labels. Re-launching SpaceRenamer restores all saved names.
+- **Private API compatibility.** `CGSSpaceSetName` is a private SkyLight API tested on macOS 14 (Sonoma). As an undocumented API, it may change or be removed in future macOS versions.
+- **Graceful degradation.** If `CGSSpaceSetName` is removed in a future macOS release, the app continues to function normally for HUD and menu bar Space naming. Only the Mission Control label injection degrades — users would see the default "Desktop N" labels in Mission Control while custom names remain visible in the HUD and menu bar.
 
 ### Alternatives Considered
 
@@ -276,7 +277,7 @@ With v2, the following item moves from out-of-scope to implemented:
 
 ## Out of Scope (v1)
 
-- Mission Control name injection (requires SIP disabled)
+- ~~Mission Control name injection (requires SIP disabled)~~ — Resolved in V2 via `CGSSpaceSetName` (see above)
 - Per-display HUD widgets (only main display in v1)
 - Custom icons per Space
 - Space creation/deletion from within the app
