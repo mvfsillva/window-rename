@@ -1,0 +1,13 @@
+# .luna/config.yaml
+mode: autopilot              # autopilot | copilot | human
+
+retries:
+  design: 2                # chandra retry cap before "Blocked"
+  dev: 2                   # artemis retry cap before "Blocked"
+  review: 3                # review fix cycles before "Blocked"
+
+concurrency:
+  designers: 5             # max parallel chandra agents
+  worktrees: 5             # max parallel dev worktrees
+
+loop_reports: true         # show iteration summaries

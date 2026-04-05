@@ -1,1 +1,42 @@
+# Swift
+.build/
+*.xcodeproj/
+*.playground
+.swiftpm/
+*.swiftformat
+*.swiftlint
+Package.resolved
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+*.app/
+*.dSYM/
+
+# Xcode
+build/
+DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.xcarchive
+*.xcworkspace
+xcuserdata/
+*.xcconfig
+
+# Environment
+.env
+.env.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+
 .superpowers/
