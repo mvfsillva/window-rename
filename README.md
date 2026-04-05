@@ -49,18 +49,35 @@ struct SpaceInfo: Identifiable {
 # Clone and navigate to project
 cd window-rename
 
-# Build
-swift build
+# Build a release .app bundle
+make build
 
-# Run
-./.build/debug/SpaceRenamer
+# Or build a debug .app bundle
+make build-debug
+
+# Run the app
+make run
 ```
+
+The build produces `build/SpaceRenamer.app` — a proper macOS .app bundle with `LSUIElement` set (menu bar only, no dock icon).
+
+You can also build manually with `swift build` and run the bare binary at `.build/debug/SpaceRenamer`, but the .app bundle is recommended for proper macOS integration (accessibility prompts, launch-at-login, etc).
 
 ### Installation
 
 ```bash
-# Create an app bundle (requires xcconfig setup)
-# For now, run directly from build output
+# Build and install to /Applications (may require sudo)
+make install
+
+# Uninstall
+make uninstall
+```
+
+### Other Make Targets
+
+```bash
+make clean    # Remove build/ directory
+make help     # List all available targets
 ```
 
 ## Configuration
@@ -106,15 +123,23 @@ These are resolved at runtime from the SkyLight framework (available in all GUI 
 ### Project Structure
 
 ```
-Sources/SpaceRenamer/
-├── SpaceRenamerApp.swift      # Main app entry point
-├── SpaceManager.swift          # Space state management
-├── ShortcutManager.swift       # Global hotkey handling
-├── PersistenceStore.swift      # Config file I/O
-├── MenuBarUI.swift             # SwiftUI popover UI
-├── HUDPanel.swift              # Floating HUD widget
-├── CGSPrivateAPI.h             # Private API declarations
-└── Info.plist                  # App configuration
+.
+├── Makefile                    # Build/install/clean targets
+├── scripts/
+│   └── build-app.sh            # .app bundle generation script
+├── Sources/
+│   ├── SpaceRenamer/
+│   │   ├── SpaceRenamerApp.swift   # Main app entry point
+│   │   ├── SpaceManager.swift      # Space state management
+│   │   ├── ShortcutManager.swift   # Global hotkey handling
+│   │   ├── PersistenceStore.swift  # Config file I/O
+│   │   ├── MenuBarUI.swift         # SwiftUI popover UI
+│   │   ├── HUDPanel.swift          # Floating HUD widget
+│   │   └── Info.plist              # Source Info.plist (template)
+│   └── CGSPrivate/
+│       └── include/
+│           └── CGSPrivateAPI.h     # Private API declarations
+└── build/                          # Generated .app bundle (gitignored)
 ```
 
 ### Testing
