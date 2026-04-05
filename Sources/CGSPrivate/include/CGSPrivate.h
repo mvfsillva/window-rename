@@ -1,15 +1,16 @@
 //
-//  CGSPrivateAPI.h
+//  CGSPrivate.h
 //  SpaceRenamer
 //
-//  Bridging header for private macOS APIs to interact with Spaces.
+//  Private macOS APIs for interacting with Spaces.
 //  These symbols are resolved at runtime from SkyLight framework.
 //
 
-#ifndef CGSPrivateAPI_h
-#define CGSPrivateAPI_h
+#ifndef CGSPrivate_h
+#define CGSPrivate_h
 
 #include <CoreFoundation/CoreFoundation.h>
+#include <CoreGraphics/CoreGraphics.h>
 
 // Connection to Core Graphics Server
 typedef int CGSConnectionID;
@@ -27,4 +28,4 @@ extern CFArrayRef CGSCopyManagedDisplaySpaces(CGSConnectionID cid);
 // Get the currently active space
 extern CGSSpaceID CGSGetActiveSpace(CGSConnectionID cid);
 
-#endif /* CGSPrivateAPI_h */
+#endif /* CGSPrivate_h */

@@ -1,0 +1,4 @@
+module CGSPrivate {
+    header "CGSPrivate.h"
+    export *
+}

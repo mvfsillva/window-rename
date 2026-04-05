@@ -1,40 +1,55 @@
 import Foundation
 import AppKit
 import Observation
+import CGSPrivate
 
 /// Represents a single macOS Space
-@Codable
-struct SpaceInfo: Identifiable {
+struct SpaceInfo: Identifiable, Codable {
     let id: String  // ManagedSpaceID (UUID)
     let numericId: UInt64  // id64
     let displayUUID: String
-    let position: Int  // 1-based index
-    
+    var position: Int  // 1-based index
+
     var customName: String
     var shortcut: KeyCombo?
     var isActive: Bool = false
-    
+
     enum CodingKeys: String, CodingKey {
         case id, numericId, displayUUID, position, customName, shortcut, isActive
     }
 }
 
 /// Keyboard shortcut combination
-struct KeyCombo: Hashable {
+struct KeyCombo: Equatable {
     let modifiers: NSEvent.ModifierFlags  // ctrl, alt, shift, cmd
     let keyCode: UInt16
     let characters: String
-    
+
+    static func == (lhs: KeyCombo, rhs: KeyCombo) -> Bool {
+        lhs.modifiers.rawValue == rhs.modifiers.rawValue
+            && lhs.keyCode == rhs.keyCode
+            && lhs.characters == rhs.characters
+    }
+
     func description() -> String {
         var parts: [String] = []
-        
+
         if modifiers.contains(.control) { parts.append("ctrl") }
         if modifiers.contains(.option) { parts.append("opt") }
         if modifiers.contains(.shift) { parts.append("shift") }
         if modifiers.contains(.command) { parts.append("cmd") }
-        
+
         parts.append(characters.uppercased())
         return parts.joined(separator: "+")
+    }
+}
+
+// MARK: - Hashable Conformance
+extension KeyCombo: Hashable {
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(modifiers.rawValue)
+        hasher.combine(keyCode)
+        hasher.combine(characters)
     }
 }
 
