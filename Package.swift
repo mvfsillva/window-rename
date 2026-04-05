@@ -11,9 +11,14 @@ let package = Package(
     ],
     dependencies: [],
     targets: [
+        .target(
+            name: "CGSPrivate",
+            path: "Sources/CGSPrivate",
+            publicHeadersPath: "include"
+        ),
         .executableTarget(
             name: "SpaceRenamer",
-            dependencies: [],
+            dependencies: ["CGSPrivate"],
             path: "Sources/SpaceRenamer"
         )
     ]

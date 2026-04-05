@@ -1,40 +1,82 @@
 import Foundation
 import AppKit
 import Observation
+import CGSPrivate
 
 /// Represents a single macOS Space
-@Codable
-struct SpaceInfo: Identifiable {
+struct SpaceInfo: Identifiable, Codable {
     let id: String  // ManagedSpaceID (UUID)
     let numericId: UInt64  // id64
     let displayUUID: String
-    let position: Int  // 1-based index
-    
+    var position: Int  // 1-based index
+
     var customName: String
     var shortcut: KeyCombo?
     var isActive: Bool = false
-    
+
     enum CodingKeys: String, CodingKey {
         case id, numericId, displayUUID, position, customName, shortcut, isActive
     }
 }
 
 /// Keyboard shortcut combination
-struct KeyCombo: Codable, Hashable {
+struct KeyCombo: Equatable {
     let modifiers: NSEvent.ModifierFlags  // ctrl, alt, shift, cmd
     let keyCode: UInt16
     let characters: String
-    
+
+    static func == (lhs: KeyCombo, rhs: KeyCombo) -> Bool {
+        lhs.modifiers.rawValue == rhs.modifiers.rawValue
+            && lhs.keyCode == rhs.keyCode
+            && lhs.characters == rhs.characters
+    }
+
     func description() -> String {
         var parts: [String] = []
-        
+
         if modifiers.contains(.control) { parts.append("ctrl") }
         if modifiers.contains(.option) { parts.append("opt") }
         if modifiers.contains(.shift) { parts.append("shift") }
         if modifiers.contains(.command) { parts.append("cmd") }
-        
+
         parts.append(characters.uppercased())
         return parts.joined(separator: "+")
+    }
+}
+
+// MARK: - Hashable Conformance
+extension KeyCombo: Hashable {
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(modifiers.rawValue)
+        hasher.combine(keyCode)
+        hasher.combine(characters)
+    }
+}
+
+// MARK: - Codable Conformance
+extension KeyCombo: Codable {
+    enum CodingKeys: String, CodingKey {
+        case modifiersMask
+        case keyCode
+        case characters
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(modifiers.rawValue, forKey: .modifiersMask)
+        try container.encode(keyCode, forKey: .keyCode)
+        try container.encode(characters, forKey: .characters)
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let modifiersMask = try container.decode(UInt.self, forKey: .modifiersMask)
+        let keyCode = try container.decode(UInt16.self, forKey: .keyCode)
+        let characters = try container.decode(String.self, forKey: .characters)
+        
+        self.modifiers = NSEvent.ModifierFlags(rawValue: modifiersMask)
+        self.keyCode = keyCode
+        self.characters = characters
     }
 }
 

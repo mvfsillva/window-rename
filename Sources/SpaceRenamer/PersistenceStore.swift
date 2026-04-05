@@ -50,7 +50,7 @@ actor PersistenceStore {
             }
         } else {
             self.config = AppConfig()
-            _ = try? self.saveConfigSync()
+            // Initial save deferred to first actor-isolated call
         }
     }
     
@@ -127,13 +127,6 @@ actor PersistenceStore {
     }
     
     private func saveConfig() async -> Void {
-        let data = try? JSONEncoder().encode(config)
-        if let data = data {
-            try? data.write(to: configURL, options: .atomic)
-        }
-    }
-    
-    private func saveConfigSync() -> Void {
         let data = try? JSONEncoder().encode(config)
         if let data = data {
             try? data.write(to: configURL, options: .atomic)
