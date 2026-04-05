@@ -33,7 +33,7 @@ run: build
 ## clean	— Remove build artifacts
 clean:
 	@echo "==> Cleaning build directory..."
-	@rm -rf $(BUILD_DIR)
+	@rm -rf "$(BUILD_DIR)"
 	@echo "==> Clean."
 
 ## help	— Show this help
