@@ -139,6 +139,9 @@ final class SpaceManager {
                 spaces[index].shortcut = config.shortcut
                 cachedSpaces[uuid]?.customName = config.name
                 cachedSpaces[uuid]?.shortcut = config.shortcut
+
+                // Push saved name to Mission Control
+                applyNameToSystem(spaces[index])
             }
         }
     }
@@ -191,6 +194,9 @@ final class SpaceManager {
                 spaces[index].isActive = true
             }
         }
+
+        // Re-apply custom names to Mission Control (survives Dock restarts)
+        applyAllCustomNamesToSystem()
 
         // Notify if active space changed
         if activeId != previousActiveId {
@@ -266,6 +272,9 @@ final class SpaceManager {
                 savedConfigs[spaceId] = AppConfig.SpaceConfig(name: newName)
             }
 
+            // Push name to Mission Control
+            applyNameToSystem(spaces[index])
+
             onSpaceUpdated?(spaces[index])
         }
     }
@@ -287,6 +296,21 @@ final class SpaceManager {
             }
 
             onSpaceUpdated?(spaces[index])
+        }
+    }
+
+    // MARK: - Mission Control Name Injection
+
+    /// Push the custom name to the system so it appears in Mission Control
+    private func applyNameToSystem(_ space: SpaceInfo) {
+        let cfName = space.customName as CFString
+        CGSSpaceSetName(cgsConnection, CGSSpaceID(space.numericId), cfName)
+    }
+
+    /// Re-apply all custom names to the system (survives Dock restarts and topology changes)
+    private func applyAllCustomNamesToSystem() {
+        for space in spaces where !space.customName.hasPrefix("Desktop ") {
+            applyNameToSystem(space)
         }
     }
 
