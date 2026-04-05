@@ -22,6 +22,18 @@ struct MenuBarUI: View {
     @State private var launchAtLogin: Bool = false
     @State private var savedQuickRenameShortcut: KeyCombo?
 
+    // Shortcut conflict alert state
+    @State private var showingConflictAlert = false
+    @State private var conflictDescription = ""
+    @State private var pendingShortcut: PendingShortcut?
+
+    /// Holds a shortcut assignment that is waiting for conflict resolution
+    struct PendingShortcut {
+        let combo: KeyCombo
+        let target: ShortcutTarget
+        let conflictId: String
+    }
+
     /// Identifies what we're recording a shortcut for
     enum ShortcutTarget: Equatable {
         case space(String)  // space UUID
@@ -157,6 +169,16 @@ struct MenuBarUI: View {
                 )
             }
         }
+        .alert("Shortcut Conflict", isPresented: $showingConflictAlert) {
+            Button("Reassign", role: .destructive) {
+                applyPendingShortcut()
+            }
+            Button("Cancel", role: .cancel) {
+                pendingShortcut = nil
+            }
+        } message: {
+            Text(conflictDescription)
+        }
     }
 
     // MARK: - Quick Rename Shortcut State
@@ -210,12 +232,56 @@ struct MenuBarUI: View {
     private func saveShortcut(_ combo: KeyCombo?, for target: ShortcutTarget) {
         guard let combo = combo else { return }
 
-        // Check for conflicts
+        // Check for conflicts (skip if the conflict is with the same target)
         if let conflictId = shortcutManager.detectConflict(for: combo) {
-            // For now, overwrite the old one
-            shortcutManager.unregisterShortcut(id: conflictId)
+            let selfId: String
+            switch target {
+            case .space(let spaceId): selfId = "space_\(spaceId)"
+            case .quickRename: selfId = "quick_rename"
+            }
+
+            // Only warn if the conflict is with a different target
+            if conflictId != selfId {
+                let conflictName = conflictDisplayName(for: conflictId)
+                conflictDescription = "This shortcut is already assigned to \(conflictName). Reassign it?"
+                pendingShortcut = PendingShortcut(combo: combo, target: target, conflictId: conflictId)
+                showingShortcutRecorder = false
+                shortcutRecordingTarget = nil
+                showingConflictAlert = true
+                return
+            }
         }
 
+        commitShortcut(combo, for: target)
+    }
+
+    /// Resolves a pending shortcut conflict after user confirms reassignment
+    private func applyPendingShortcut() {
+        guard let pending = pendingShortcut else { return }
+        let conflictId = pending.conflictId
+
+        // Remove the shortcut from the old owner
+        shortcutManager.unregisterShortcut(id: conflictId)
+
+        // If the conflict was with a space, clear its shortcut in SpaceManager and persistence
+        if conflictId.hasPrefix("space_") {
+            let oldSpaceUUID = String(conflictId.dropFirst("space_".count))
+            spaceManager.updateSpaceShortcut(oldSpaceUUID, shortcut: nil)
+            Task {
+                await persistenceStore.setSpaceShortcut(nil, forUUID: oldSpaceUUID)
+            }
+        } else if conflictId == "quick_rename" {
+            Task {
+                await persistenceStore.setQuickRenameShortcut(nil)
+            }
+        }
+
+        commitShortcut(pending.combo, for: pending.target)
+        pendingShortcut = nil
+    }
+
+    /// Applies a shortcut assignment (no conflict check — call after conflict is resolved)
+    private func commitShortcut(_ combo: KeyCombo, for target: ShortcutTarget) {
         switch target {
         case .space(let spaceId):
             spaceManager.updateSpaceShortcut(spaceId, shortcut: combo)
@@ -243,6 +309,20 @@ struct MenuBarUI: View {
 
         showingShortcutRecorder = false
         shortcutRecordingTarget = nil
+    }
+
+    /// Returns a human-readable name for a shortcut registration ID
+    private func conflictDisplayName(for registrationId: String) -> String {
+        if registrationId == "quick_rename" {
+            return "Quick Rename"
+        }
+        if registrationId.hasPrefix("space_") {
+            let spaceUUID = String(registrationId.dropFirst("space_".count))
+            if let space = spaceManager.getSpace(spaceUUID) {
+                return "'\(space.customName)'"
+            }
+        }
+        return "another shortcut"
     }
 
     private func clearShortcut(for space: SpaceInfo) {
