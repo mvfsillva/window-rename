@@ -20,7 +20,7 @@ struct SpaceInfo: Identifiable {
 }
 
 /// Keyboard shortcut combination
-struct KeyCombo: Codable, Hashable {
+struct KeyCombo: Hashable {
     let modifiers: NSEvent.ModifierFlags  // ctrl, alt, shift, cmd
     let keyCode: UInt16
     let characters: String
@@ -35,6 +35,33 @@ struct KeyCombo: Codable, Hashable {
         
         parts.append(characters.uppercased())
         return parts.joined(separator: "+")
+    }
+}
+
+// MARK: - Codable Conformance
+extension KeyCombo: Codable {
+    enum CodingKeys: String, CodingKey {
+        case modifiersMask
+        case keyCode
+        case characters
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(modifiers.rawValue, forKey: .modifiersMask)
+        try container.encode(keyCode, forKey: .keyCode)
+        try container.encode(characters, forKey: .characters)
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let modifiersMask = try container.decode(UInt.self, forKey: .modifiersMask)
+        let keyCode = try container.decode(UInt16.self, forKey: .keyCode)
+        let characters = try container.decode(String.self, forKey: .characters)
+        
+        self.modifiers = NSEvent.ModifierFlags(rawValue: modifiersMask)
+        self.keyCode = keyCode
+        self.characters = characters
     }
 }
 
